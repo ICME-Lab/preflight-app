@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Preflight signup, sign with MetaMask</title>
+  <style>
+    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #f6f7fb; color: #1a1d24; margin: 0; padding: 40px 24px; display: flex; justify-content: center; }
+    .card { background: #fff; border: 1px solid #e2e5ec; border-radius: 10px; padding: 28px; max-width: 520px; width: 100%; box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06); }
+    h1 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+    .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 18px; }
+    .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eef0f4; font-size: 13px; }
+    .row:last-child { border-bottom: none; }
+    .row .k { color: #6b7280; }
+    .row .v { font-family: "SF Mono", Menlo, monospace; font-size: 12px; word-break: break-all; text-align: right; max-width: 60%; }
+    .amount { font-family: "SF Mono", Menlo, monospace; font-size: 24px; font-weight: 700; padding: 8px 0; }
+    button { background: #6c5ce7; color: #fff; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; width: 100%; margin-top: 16px; }
+    button:hover { background: #5848d8; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .status { margin-top: 14px; padding: 10px; border-radius: 6px; font-size: 13px; background: #f1f3f8; color: #4b5563; }
+    .status.error { background: #fee2e2; color: #991b1b; }
+    .status.success { background: #dcfce7; color: #166534; }
+    .muted { color: #6b7280; font-size: 12px; margin-top: 12px; }
+    code { font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Sign Preflight signup payment</h1>
+    <div class="subtitle">MetaMask will prompt you for an EIP-3009 transferWithAuthorization. No on-chain transaction is sent now, just a signature; the server settles it.</div>
+
+    <div id="details" hidden>
+      <div class="amount" id="amount">-</div>
+      <div class="row"><span class="k">Token</span><span class="v" id="token">-</span></div>
+      <div class="row"><span class="k">Network</span><span class="v" id="network">Base (8453)</span></div>
+      <div class="row"><span class="k">Pay to</span><span class="v" id="payTo">-</span></div>
+      <div class="row"><span class="k">Valid until</span><span class="v" id="validBefore">-</span></div>
+      <div class="row"><span class="k">Your address</span><span class="v" id="from">(connect wallet)</span></div>
+    </div>
+
+    <button id="action" disabled>Loading...</button>
+    <div id="status" class="status" hidden></div>
+    <div class="muted">Tab will say when you can close it.</div>
+  </div>
+
+<script>
+const BASE_CHAIN_HEX = "0x2105"; // 8453
+
+const $ = (id) => document.getElementById(id);
+const setStatus = (msg, kind) => {
+  const el = $("status");
+  el.hidden = false;
+  el.textContent = msg;
+  el.className = "status" + (kind ? " " + kind : "");
+};
+
+let config = null;
+let sessionId = null;
+let signedSent = false;
+
+async function loadConfig() {
+  const url = new URL(window.location.href);
+  sessionId = url.searchParams.get("s");
+  const resp = await fetch("/sign/config?session_id=" + encodeURIComponent(sessionId || ""));
+  if (!resp.ok) throw new Error("Could not load signer config");
+  config = await resp.json();
+  $("amount").textContent = config.amount_display;
+  $("token").textContent = config.token_name + " v" + config.token_version;
+  $("network").textContent = "Base (chain " + config.chain_id + ")";
+  $("payTo").textContent = config.pay_to;
+  $("validBefore").textContent = new Date(parseInt(config.valid_before, 10) * 1000).toLocaleString();
+  $("details").hidden = false;
+}
+
+async function ensureBaseNetwork() {
+  const current = await ethereum.request({ method: "eth_chainId" });
+  if (current === BASE_CHAIN_HEX || current === "0x" + parseInt(BASE_CHAIN_HEX).toString(16)) return;
+  try {
+    await ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: BASE_CHAIN_HEX }],
+    });
+  } catch (err) {
+    if (err && err.code === 4902) {
+      await ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [{
+          chainId: BASE_CHAIN_HEX,
+          chainName: "Base",
+          nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+          rpcUrls: ["https://mainnet.base.org"],
+          blockExplorerUrls: ["https://basescan.org"],
+        }],
+      });
+    } else {
+      throw err;
+    }
+  }
+}
+
+function buildTypedData(from) {
+  return {
+    types: {
+      EIP712Domain: [
+        { name: "name", type: "string" },
+        { name: "version", type: "string" },
+        { name: "chainId", type: "uint256" },
+        { name: "verifyingContract", type: "address" },
+      ],
+      TransferWithAuthorization: [
+        { name: "from", type: "address" },
+        { name: "to", type: "address" },
+        { name: "value", type: "uint256" },
+        { name: "validAfter", type: "uint256" },
+        { name: "validBefore", type: "uint256" },
+        { name: "nonce", type: "bytes32" },
+      ],
+    },
+    primaryType: "TransferWithAuthorization",
+    domain: {
+      name: config.token_name,
+      version: config.token_version,
+      chainId: config.chain_id,
+      verifyingContract: config.token_address,
+    },
+    message: {
+      from,
+      to: config.pay_to,
+      value: config.amount,
+      validAfter: config.valid_after,
+      validBefore: config.valid_before,
+      nonce: config.nonce,
+    },
+  };
+}
+
+async function signFlow() {
+  if (!window.ethereum) {
+    setStatus("MetaMask not detected. Install MetaMask and reload this page.", "error");
+    return;
+  }
+  $("action").disabled = true;
+  $("action").textContent = "Connecting wallet...";
+  setStatus("");
+  try {
+    const accounts = await ethereum.request({ method: "eth_requestAccounts" });
+    const from = accounts[0];
+    $("from").textContent = from;
+
+    $("action").textContent = "Switching to Base...";
+    await ensureBaseNetwork();
+
+    $("action").textContent = "Awaiting signature...";
+    const typedData = buildTypedData(from);
+    const signature = await ethereum.request({
+      method: "eth_signTypedData_v4",
+      params: [from, JSON.stringify(typedData)],
+    });
+
+    setStatus("Sending signature back to the app...");
+    const resp = await fetch("/sign/result", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ from, signature, session_id: sessionId }),
+    });
+    if (!resp.ok) throw new Error("App rejected the signature (" + resp.status + ")");
+    signedSent = true;
+    setStatus("Signed. You can close this tab and return to Preflight.", "success");
+    $("action").textContent = "Done";
+  } catch (err) {
+    console.error(err);
+    const msg = err && err.message ? err.message : String(err);
+    setStatus("Sign failed: " + msg, "error");
+    $("action").disabled = false;
+    $("action").textContent = "Try again";
+    try {
+      await fetch("/sign/cancel", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: msg, session_id: sessionId }),
+      });
+    } catch (_) {}
+  }
+}
+
+(async () => {
+  try {
+    await loadConfig();
+    if (!window.ethereum) {
+      setStatus("MetaMask not detected in this browser. Install or enable the MetaMask extension, then reload.", "error");
+      $("action").textContent = "Reload";
+      $("action").disabled = false;
+      $("action").onclick = () => location.reload();
+      return;
+    }
+    $("action").disabled = false;
+    $("action").textContent = "Sign with MetaMask";
+    $("action").onclick = signFlow;
+  } catch (err) {
+    setStatus("Could not start: " + (err.message || err), "error");
+  }
+})();
+
+window.addEventListener("beforeunload", () => {
+  if (signedSent || !sessionId) return;
+  navigator.sendBeacon &&
+    navigator.sendBeacon(
+      "/sign/cancel",
+      new Blob([JSON.stringify({ reason: "Tab closed", session_id: sessionId })], { type: "application/json" }),
+    );
+});
+</script>
+</body>
+</html>
