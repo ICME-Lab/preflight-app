@@ -43,18 +43,24 @@ jobs:
       - name: Install JS deps
         run: npm ci
 
-      - name: Build and publish to draft release
+      - name: Build, sign, notarize, and publish to draft release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Code signing (Developer ID Application certificate).
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # Notarization (uses an app-specific password from appleid.apple.com).
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Preflight ${{ github.ref_name }}"
           releaseBody: |
-            macOS universal build (Apple Silicon + Intel).
-
-            First-launch quarantine:
-              `xattr -d com.apple.quarantine /Applications/Preflight.app`
+            macOS universal build (Apple Silicon + Intel), signed and notarized.
+            Download the .dmg, drag to /Applications, double-click. No warnings.
           releaseDraft: true
           prerelease: false
           args: --target universal-apple-darwin
