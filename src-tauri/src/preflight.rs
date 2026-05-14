@@ -277,12 +277,65 @@ impl PreflightClient {
         .await
     }
 
+    /// Run an action check the same way the Claude Code hook does:
+    /// `/v1/checkIt` (SSE), parse the final `data:` line, then collapse
+    /// `result` + `ar_result` into a definitive SAT/UNSAT verdict.
+    ///
+    /// `/v1/checkItProd` is intentionally avoided here: its top-level
+    /// `result` returns SAT for some policies even when AR finds a
+    /// contradiction, so the in-app verdict was diverging from the hook.
     pub async fn check_prod(&self, policy_id: &str, action: &str) -> Result<Value, PreflightError> {
-        self.post_json(
-            "/checkItProd",
-            serde_json::json!({ "policy_id": policy_id, "action": action }),
-        )
-        .await
+        let url = format!("{}/checkIt", self.base);
+        let key = self.key().await?;
+        let resp = self
+            .http
+            .post(&url)
+            .header("X-API-Key", key)
+            .header(header::ACCEPT, "text/event-stream")
+            .json(&serde_json::json!({ "policy_id": policy_id, "action": action }))
+            .send()
+            .await?;
+        let status = resp.status();
+        let body = resp.text().await?;
+        if !status.is_success() {
+            return Err(PreflightError::Api { status: status.as_u16(), body });
+        }
+
+        // Pull the last `data: {...}` line out of the SSE stream. Fall back to
+        // treating the whole body as JSON if no SSE markers are present.
+        let payload = if body.lines().any(|l| l.starts_with("data: ")) {
+            body.lines()
+                .filter_map(|l| l.strip_prefix("data: "))
+                .last()
+                .unwrap_or("")
+                .to_string()
+        } else {
+            body.clone()
+        };
+
+        let mut value: Value = serde_json::from_str(&payload)
+            .map_err(|_| PreflightError::Api {
+                status: status.as_u16(),
+                body: format!("could not parse final SSE payload: {}", payload),
+            })?;
+
+        let top_result = value.get("result").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let ar_result = value.get("ar_result").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let blocked = top_result == "UNSAT" || ar_result == "UNSAT";
+        let final_result = if blocked { "UNSAT" } else { "SAT" };
+
+        // Normalize the response so the frontend can render verdict/blocked/reason
+        // without caring about the underlying endpoint quirks.
+        if let Some(obj) = value.as_object_mut() {
+            obj.insert("result".to_string(), Value::String(final_result.to_string()));
+            obj.insert("blocked".to_string(), Value::Bool(blocked));
+            if !obj.contains_key("reason") {
+                if let Some(d) = obj.get("detail").cloned() {
+                    obj.insert("reason".to_string(), d);
+                }
+            }
+        }
+        Ok(value)
     }
 
     pub async fn proof_meta(&self, id: &str) -> Result<Value, PreflightError> {
