@@ -61,9 +61,12 @@ Built with [Tauri 2](https://tauri.app) (Rust) + React + TypeScript.
 
 ## Screenshots
 
-Main view: policies in the sidebar, compiled rules and test-action panel on the
-right, account / credits / API-key chip in the top bar, hook status banner
-underneath.
+**Main view.** Each region of the window at a glance:
+
+- **Top bar** — API key (show / copy), credit balance with USD estimate, Claude Code Hook settings, Refresh, Log out.
+- **Status banner** — live indicator of whether the hook is currently enabled.
+- **Sidebar** — every policy on your account, with local nicknames and a "show hidden" toggle.
+- **Main panel** — the selected policy's compiled rules, a Test-an-action card, and the SMT formula collapsed behind a toggle.
 
 ![Main view](screenshots/main-view.png)
 
