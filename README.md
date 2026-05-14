@@ -8,6 +8,8 @@ of every check made against your account (in-app and hook-driven).
 
 Built with [Tauri 2](https://tauri.app) (Rust) + React + TypeScript.
 
+**Docs:** [docs.icme.io](https://docs.icme.io) · **Repo:** [github.com/ICME-Lab/preflight-app](https://github.com/ICME-Lab/preflight-app)
+
 ## What the app does
 
 **Account**
