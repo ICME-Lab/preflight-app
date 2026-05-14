@@ -56,8 +56,6 @@ Built with [Tauri 2](https://tauri.app) (Rust) + React + TypeScript.
 - The Activity log surfaces every verification (in-app or hook-driven), tagged
   by source, expandable to show the plain-English description, verdict,
   reason, policy id, and cryptographic check id.
-- The log is backed by `~/.icme/preflight-activity.log` so entries survive
-  app restarts (and so external tooling can tail the same file).
 
 ## Screenshots
 
