@@ -16,7 +16,7 @@ interface SignupResult {
   [k: string]: unknown;
 }
 
-type Phase = "form" | "running" | "done" | "error";
+type Phase = "form" | "running" | "running-card" | "done" | "error";
 
 interface ParsedError {
   kind: "insufficient_funds" | "rejected" | "timeout" | "other";
@@ -95,6 +95,21 @@ export default function SignupModal({ onClose, onComplete }: Props) {
     }
   }, [isValid, username]);
 
+  const submitCard = useCallback(async () => {
+    if (!isValid) return;
+    setError(null);
+    setResult(null);
+    setPhase("running-card");
+    try {
+      const res = await invoke<SignupResult>("signup_card", { username });
+      setResult(res);
+      setPhase("done");
+    } catch (e) {
+      setError(parseError(String(e)));
+      setPhase("error");
+    }
+  }, [isValid, username]);
+
   const copyAddr = useCallback(async () => {
     if (!signerAddress) return;
     await navigator.clipboard.writeText(signerAddress);
@@ -103,11 +118,11 @@ export default function SignupModal({ onClose, onComplete }: Props) {
   }, [signerAddress]);
 
   return (
-    <div className="modal-backdrop" onClick={phase === "running" ? undefined : onClose}>
+    <div className="modal-backdrop" onClick={phase === "running" || phase === "running-card" ? undefined : onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3>Create Preflight account</h3>
-          {phase !== "running" && (
+          {phase !== "running" && phase !== "running-card" && (
             <button className="link" onClick={onClose}>close</button>
           )}
         </div>
@@ -115,9 +130,8 @@ export default function SignupModal({ onClose, onComplete }: Props) {
         {phase === "form" && (
           <>
             <p>
-              Sign up with $5.00 USDC on Base. You'll get an API key and 325 starter credits.
-              MetaMask will pop up in your browser to sign an EIP-3009 authorization; no on-chain
-              transaction yet, just a signature.
+              $5.00 gets you an API key + 325 starter credits. Pay either with a card via
+              Stripe, or with $5 USDC on Base via MetaMask.
             </p>
             <div className="card-title" style={{ marginTop: 8 }}>Username</div>
             <input
@@ -129,9 +143,12 @@ export default function SignupModal({ onClose, onComplete }: Props) {
             <div className="muted small" style={{ marginTop: 4 }}>
               Lowercase letters, digits, dashes. 3-32 characters. Cannot be changed later.
             </div>
-            <div className="row">
-              <button className="primary" onClick={submit} disabled={!isValid}>
-                Continue with MetaMask
+            <div className="row" style={{ marginTop: 12, gap: 8 }}>
+              <button className="primary" onClick={submitCard} disabled={!isValid}>
+                Pay with card
+              </button>
+              <button onClick={submit} disabled={!isValid}>
+                Pay with MetaMask
               </button>
             </div>
           </>
@@ -154,6 +171,23 @@ export default function SignupModal({ onClose, onComplete }: Props) {
                   Signed by <code>{signerAddress}</code>. Submitting to the server...
                 </div>
               )}
+            </div>
+          </>
+        )}
+
+        {phase === "running-card" && (
+          <>
+            <p>
+              Your browser should have opened Stripe Checkout. Complete the payment there.
+              The app polls every few seconds and will continue automatically once the payment
+              is confirmed.
+            </p>
+            <div className="card progress">
+              <div className="card-title">Waiting for Stripe...</div>
+              <p className="muted small">
+                Don't close this window. If the tab didn't open, check your browser's pop-up
+                blocker.
+              </p>
             </div>
           </>
         )}

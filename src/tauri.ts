@@ -28,6 +28,7 @@ export const api = {
   setHookPolicy: (policyId: string) => invoke<void>("set_hook_policy", { policyId }),
   installClaudePreflight: () => invoke<number>("install_claude_preflight"),
   uninstallClaudePreflight: () => invoke<number>("uninstall_claude_preflight"),
+  signupCard: (username: string) => invoke<Record<string, unknown>>("signup_card", { username }),
   logout: () => invoke<number>("logout"),
   saveApiKey: (apiKey: string) => invoke<string>("save_api_key", { apiKey }),
   getHookEnvApiKey: () => invoke<string | null>("get_hook_env_api_key"),

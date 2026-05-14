@@ -342,6 +342,36 @@ impl PreflightClient {
         self.get_json(&format!("/proof/{}", id)).await
     }
 
+    /// Begin the Stripe-card signup flow. Returns the server's response, which
+    /// should include a `checkout_url` (the hosted Stripe Checkout page) and
+    /// a `session_id` (passed to GET /v1/session/{id} to poll for completion).
+    /// Unauthenticated: the user doesn't have an API key yet.
+    pub async fn create_user_card(&self, username: &str) -> Result<Value, PreflightError> {
+        let url = format!("{}/createUserCard", self.base);
+        let resp = self
+            .http
+            .post(&url)
+            .header(header::ACCEPT, "application/json")
+            .header(header::CONTENT_TYPE, "application/json")
+            .json(&serde_json::json!({ "username": username }))
+            .send()
+            .await?;
+        json_or_err(resp).await
+    }
+
+    /// Poll the Stripe checkout session. Returns either `{status: "pending"}`
+    /// or `{status: "complete", api_key, credits, ...}`. Unauthenticated.
+    pub async fn poll_session(&self, session_id: &str) -> Result<Value, PreflightError> {
+        let url = format!("{}/session/{}", self.base, session_id);
+        let resp = self
+            .http
+            .get(&url)
+            .header(header::ACCEPT, "application/json")
+            .send()
+            .await?;
+        json_or_err(resp).await
+    }
+
     /// Step 1 of signup: POST /createUserX402 with username, parse the 402 payment requirements.
     pub async fn signup_quote(&self, username: &str) -> Result<PaymentRequirements, PreflightError> {
         let url = format!("{}/createUserX402", self.base);

@@ -404,6 +404,69 @@ async fn get_hook_script() -> Result<Option<String>, PreflightError> {
     Ok(read_hook_script())
 }
 
+/// Stripe-card signup: kick off /createUserCard, open Stripe Checkout in the
+/// user's default browser, then poll /session/{id} until the server returns
+/// a completed payment + api_key. On success, the key is saved to disk and
+/// loaded into the in-memory client (same as the MetaMask flow).
+#[tauri::command]
+async fn signup_card(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    username: String,
+) -> Result<Value, SignupError> {
+    let _ = app;
+    let username = username.trim().to_string();
+    if username.is_empty() {
+        return Err(SignupError::Cancelled("username is empty".into()));
+    }
+
+    let resp = state.client.create_user_card(&username).await?;
+
+    let checkout_url = pick_str(&resp, &["checkout_url", "checkoutUrl", "url"]).ok_or_else(|| {
+        SignupError::NoApiKey(format!("server response missing checkout_url: {}", resp))
+    })?;
+    let session_id = pick_str(&resp, &["session_id", "sessionId", "id"]).ok_or_else(|| {
+        SignupError::NoApiKey(format!("server response missing session_id: {}", resp))
+    })?;
+
+    open::that(&checkout_url).map_err(|e| SignupError::Browser(e.to_string()))?;
+
+    // Poll for up to 15 minutes. Stripe Checkout sessions expire after that
+    // anyway, and most users complete within a minute.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15 * 60);
+    loop {
+        if std::time::Instant::now() > deadline {
+            return Err(SignupError::Timeout);
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        let session = match state.client.poll_session(&session_id).await {
+            Ok(s) => s,
+            Err(_) => continue, // transient network error; keep polling
+        };
+        let status = pick_str(&session, &["status", "state"]).unwrap_or_default();
+        if status.eq_ignore_ascii_case("complete") || status.eq_ignore_ascii_case("succeeded") {
+            let api_key = pick_str(&session, &["api_key", "apiKey"])
+                .ok_or_else(|| SignupError::NoApiKey(session.to_string()))?;
+            save_api_key_to_disk(&api_key).map_err(PreflightError::from)?;
+            state.client.set_key(api_key.clone()).await;
+            return Ok(session);
+        }
+    }
+}
+
+fn pick_str(v: &Value, keys: &[&str]) -> Option<String> {
+    if let Some(obj) = v.as_object() {
+        for k in keys {
+            if let Some(s) = obj.get(*k).and_then(|x| x.as_str()) {
+                if !s.is_empty() {
+                    return Some(s.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
 #[tauri::command]
 async fn logout(state: State<'_, AppState>, app: AppHandle) -> Result<i32, PreflightError> {
     state.client.clear_key().await;
@@ -451,6 +514,7 @@ pub fn run() {
             install_claude_preflight,
             uninstall_claude_preflight,
             signup,
+            signup_card,
             logout,
             save_api_key,
             get_hook_env_api_key,
