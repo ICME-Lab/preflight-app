@@ -8,6 +8,19 @@ of every check made against your account (in-app and hook-driven).
 
 Built with [Tauri 2](https://tauri.app) (Rust) + React + TypeScript.
 
+## Screenshots
+
+Main view: policies in the sidebar, compiled rules and test-action panel on the
+right, account / credits / API-key chip in the top bar, hook status banner
+underneath.
+
+![Main view](screenshots/main-view.png)
+
+Claude Code Hook modal: install / uninstall the hook, toggle enable, pick the
+active policy, and inspect the installed hook script.
+
+![Claude Code Hook modal](screenshots/hook-settings.png)
+
 ## Prerequisites
 
 - **macOS** (Apple Silicon or Intel). Linux/Windows are theoretically supported
