@@ -55,19 +55,38 @@ jobs:
       - name: Install JS deps
         run: npm ci
 
-      - name: Build and publish to draft release
-        uses: tauri-apps/tauri-action@v0
+      # Only export the APPLE_* vars when an APPLE_CERTIFICATE secret is
+      # actually set. tauri-action otherwise tries to `security import` an
+      # empty blob and fails. Without these, the macOS build still runs and
+      # produces an ad-hoc signed .dmg (unsigned/un-notarized).
+      - name: Configure macOS signing
+        if: matrix.platform == 'macos-latest'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS code signing + notarization. Empty on non-macOS runners
-          # (tauri-action ignores them); kept here as a single env block so
-          # the workflow stays compact.
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            {
+              echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE"
+              echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
+              echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+              echo "APPLE_ID=$APPLE_ID"
+              echo "APPLE_PASSWORD=$APPLE_PASSWORD"
+              echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+            } >> "$GITHUB_ENV"
+            echo "macOS signing + notarization: enabled"
+          else
+            echo "APPLE_CERTIFICATE not set; producing ad-hoc signed build"
+          fi
+
+      - name: Build and publish to draft release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Preflight ${{ github.ref_name }}"
