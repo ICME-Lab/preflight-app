@@ -8,6 +8,55 @@ of every check made against your account (in-app and hook-driven).
 
 Built with [Tauri 2](https://tauri.app) (Rust) + React + TypeScript.
 
+## What the app does
+
+**Account**
+
+- Sign up with **Stripe** (card) or **MetaMask** (USDC on Base via x402 / EIP-3009).
+- Log in with an existing `sk-smt-` key (paste, or import from `~/.icme/env`).
+- See your live credit balance with a USD estimate (top-up rate, $0.01 / credit).
+- Reveal / copy the API key from the top bar, and log out cleanly (key removed
+  from disk, hook uninstalled, activity log wiped, local nicknames + hidden
+  flags cleared).
+
+**Policies**
+
+- Browse every policy on your account in the sidebar.
+- For each policy, view its compiled rules as plain-English numbered items
+  and inspect the underlying SMT-LIB formula (pretty-printed, syntax-coloured,
+  collapsed by default).
+- Author a new policy with the **+ new** flow: one box per rule, the app
+  joins them into a numbered list and streams compilation progress live.
+- Give policies a local nickname (stored on this machine only).
+- Hide policies you don't want to see, with a "show hidden" toggle to bring
+  them back.
+
+**Verification**
+
+- **Test an action** against the selected policy from the policy detail panel
+  (same code path the Claude Code hook uses, so verdicts match exactly).
+- **Add scenarios** to a policy as saved test cases.
+- **Approve / reject** existing scenarios; rejections take a free-form
+  annotation that gets queued for the **Refine policy** flow.
+
+**Claude Code hook**
+
+- One-click **Install / Reinstall** of the `icme-claude-preflight` hook into
+  Claude Code's user-scope `~/.claude/settings.json`.
+- Toggle the hook **Enabled / Disabled** without uninstalling.
+- Pick which policy is active for hook-driven checks.
+- Inspect the installed hook script inside the app.
+- One-click **Uninstall** that strips the hook entry from Claude's settings.
+
+**Activity**
+
+- Top-bar status banner shows live hook state (green "enabled" / grey "disabled").
+- The Activity log surfaces every verification (in-app or hook-driven), tagged
+  by source, expandable to show the plain-English description, verdict,
+  reason, policy id, and cryptographic check id.
+- The log is backed by `~/.icme/preflight-activity.log` so entries survive
+  app restarts (and so external tooling can tail the same file).
+
 ## Screenshots
 
 Main view: policies in the sidebar, compiled rules and test-action panel on the
