@@ -533,6 +533,7 @@ async fn stream_sse(
     resp: Response,
 ) -> Result<(), PreflightError> {
     let mut stream = resp.bytes_stream().eventsource();
+    let mut saw_terminal = false;
     while let Some(item) = stream.next().await {
         match item {
             Ok(ev) => {
@@ -541,10 +542,28 @@ async fn stream_sse(
                 let payload = SseEvent { stream_id: stream_id.to_string(), event: kind.clone(), data };
                 let _ = app.emit(channel, payload);
                 if kind.eq_ignore_ascii_case("done") || kind.eq_ignore_ascii_case("error") {
+                    saw_terminal = true;
                     break;
                 }
             }
-            Err(e) => return Err(PreflightError::Sse(e.to_string())),
+            Err(e) => {
+                // Transport errors after the server has emitted a terminal event
+                // (e.g. mid-flush TCP close after `done`) are harmless. Swallow
+                // them; the consumer already has the verdict.
+                if saw_terminal {
+                    break;
+                }
+                // Otherwise surface as a synthetic `error` event so the UI can
+                // render something useful, then propagate.
+                let msg = e.to_string();
+                let payload = SseEvent {
+                    stream_id: stream_id.to_string(),
+                    event: "error".to_string(),
+                    data: Value::String(msg.clone()),
+                };
+                let _ = app.emit(channel, payload);
+                return Err(PreflightError::Sse(msg));
+            }
         }
     }
     Ok(())
