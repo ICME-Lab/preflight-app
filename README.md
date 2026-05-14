@@ -21,6 +21,13 @@ active policy, and inspect the installed hook script.
 
 ![Claude Code Hook modal](screenshots/hook-settings.png)
 
+Activity log: every verification, whether triggered by the in-app test or by
+the Claude Code hook, streams into a unified log. Hook-driven entries are
+tagged and expandable to show the plain-English description, verdict, and
+the cryptographic check id.
+
+![Activity log](screenshots/activity-log.png)
+
 ## Prerequisites
 
 - **macOS** (Apple Silicon or Intel). Linux/Windows are theoretically supported
