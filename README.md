@@ -68,14 +68,21 @@ Built with [Tauri 2](https://tauri.app) (Rust) + React + TypeScript.
 
 ![Main view](screenshots/main-view.png)
 
-Claude Code Hook modal: install / uninstall the hook, toggle enable, pick the active policy, and inspect the installed hook script.
+**Claude Code Hook modal.** Everything that touches Claude's PreToolUse hook lives here:
+
+- **Installation** — install or reinstall the hook into `~/.claude/settings.json`, with a live status line and an Uninstall button.
+- **Enable toggle** — flip `ICME_HOOK_ENABLED` in `~/.icme/env` without uninstalling.
+- **Active policy** — dropdown of every policy on your account; writes `ICME_POLICY_ID` for the hook.
+- **Hook script** — open `~/.icme/preflight-hook.sh` in-app to inspect exactly what's running.
 
 ![Claude Code Hook modal](screenshots/hook-settings.png)
 
-Activity log: every verification, whether triggered by the in-app test or by
-the Claude Code hook, streams into a unified log. Hook-driven entries are
-tagged and expandable to show the plain-English description, verdict, and
-the cryptographic check id.
+**Activity log.** Every verification, whether in-app or hook-driven, ends up here:
+
+- **Unified stream** — entries from both sources (in-app test and Claude Code hook) merge in chronological order.
+- **Source tag** — hook-driven rows are marked so you can tell which client issued each check.
+- **Expandable detail** — click a row to reveal the plain-English description, verdict, reason, policy id, and cryptographic check id.
+- **Persistent** — backed by `~/.icme/preflight-activity.log`, so history survives app restarts.
 
 ![Activity log](screenshots/activity-log.png)
 
