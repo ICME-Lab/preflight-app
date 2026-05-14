@@ -16,8 +16,7 @@ underneath.
 
 ![Main view](screenshots/main-view.png)
 
-Claude Code Hook modal: install / uninstall the hook, toggle enable, pick the
-active policy, and inspect the installed hook script.
+Claude Code Hook modal: install / uninstall the hook, toggle enable, pick the active policy, and inspect the installed hook script.
 
 ![Claude Code Hook modal](screenshots/hook-settings.png)
 
@@ -75,6 +74,9 @@ For a universal binary that runs on both Apple Silicon and Intel:
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
 npm run tauri build -- --target universal-apple-darwin
 ```
+
+Windows builds aren't practical from macOS; they're produced by the
+`windows-latest` runner in the release workflow on tag push.
 
 ### Installing a locally-built binary
 

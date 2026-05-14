@@ -1,9 +1,10 @@
 name: Release
 
-# Tag-driven release: `git tag v0.1.1 && git push origin v0.1.1` builds a
-# universal-apple-darwin .dmg and attaches it to a draft GitHub Release named
-# after the tag. The Release stays in draft until you publish it manually,
-# giving you a chance to test the artifact first.
+# Tag-driven release: `git tag v0.1.2 && git push origin v0.1.2` builds the
+# app on every platform listed in the matrix and attaches the resulting
+# installers (.dmg on macOS, .msi/.exe on Windows) to a single draft GitHub
+# Release named after the tag. The Release stays in draft until you publish
+# it manually.
 
 on:
   push:
@@ -15,10 +16,21 @@ permissions:
   contents: write
 
 jobs:
-  macos:
-    name: Build macOS universal
-    runs-on: macos-latest
-    timeout-minutes: 60
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+            rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+          - platform: windows-latest
+            args: ""
+            rust-targets: "x86_64-pc-windows-msvc"
+
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +45,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: ${{ matrix.rust-targets }}
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
@@ -43,15 +55,16 @@ jobs:
       - name: Install JS deps
         run: npm ci
 
-      - name: Build, sign, notarize, and publish to draft release
+      - name: Build and publish to draft release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Code signing (Developer ID Application certificate).
+          # macOS code signing + notarization. Empty on non-macOS runners
+          # (tauri-action ignores them); kept here as a single env block so
+          # the workflow stays compact.
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # Notarization (uses an app-specific password from appleid.apple.com).
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -59,8 +72,15 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Preflight ${{ github.ref_name }}"
           releaseBody: |
-            macOS universal build (Apple Silicon + Intel), signed and notarized.
-            Download the .dmg, drag to /Applications, double-click. No warnings.
+            macOS universal `.dmg` + Windows `.msi` / `.exe`.
+
+            macOS: signed and notarized if the APPLE_* secrets are configured;
+            otherwise ad-hoc signed (right-click → Open or
+            `xattr -dr com.apple.quarantine /Applications/Preflight.app`).
+
+            Windows: unsigned. Microsoft SmartScreen may warn on first launch
+            ("More info" → "Run anyway"). Signing requires a Windows
+            code-signing certificate.
           releaseDraft: true
           prerelease: false
-          args: --target universal-apple-darwin
+          args: ${{ matrix.args }}
